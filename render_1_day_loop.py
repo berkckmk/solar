@@ -13,6 +13,7 @@ Visuals:
 
 from __future__ import annotations
 
+import argparse
 import json
 import math
 import os
@@ -53,8 +54,8 @@ SAMPLES = 16
 FPS = 30
 
 
-def build_animated_1day_scene():
-    """Build the single scene with keyframed animation from frame 1 to 600."""
+def build_animated_1day_scene(f0: int = 1, f1: int = TOTAL_FRAMES, still: int | None = None):
+    """Build the single scene with keyframed animation and render specified frames."""
     clear_scene()
     setup_render_settings(RESOLUTION, SAMPLES)
     setup_world_starfield()
@@ -214,18 +215,10 @@ def build_animated_1day_scene():
     t_mat.node_tree.links.new(t_em.outputs['Emission'], t_out.inputs['Surface'])
     trail_obj.data.materials.append(t_mat)
 
-    print("\nStarting per-frame animation and render (600 frames)...")
-    FRAMES_DIR.mkdir(parents=True, exist_ok=True)
-
     dist = earth_vis_r * 7.5
 
-    for f in range(1, TOTAL_FRAMES + 1):
-        frame_file = FRAMES_DIR / f"frame_{f:06d}.png"
-        if frame_file.exists() and frame_file.stat().st_size > 0:
-            continue
-
-        # Normalized time: 0.0 to 1.0 day
-        t_day = (f - 1) / (TOTAL_FRAMES - 1)
+    def update_frame(f: int):
+        t_day = (f - 1) / (TOTAL_FRAMES - 1) if TOTAL_FRAMES > 1 else 0.0
         sim_hours = t_day * 24.0
 
         # Earth position
@@ -234,7 +227,6 @@ def build_animated_1day_scene():
         earth_obj.location = (ex, ey, ez)
 
         # Earth 360-degree axial rotation (diurnal cycle)
-        # Exactly 2*pi radians over the 24 hours
         earth_rot_z = t_day * 2.0 * math.pi
         earth_obj.rotation_euler = (tilt_rad, 0.0, earth_rot_z)
 
@@ -284,12 +276,37 @@ def build_animated_1day_scene():
             tx, ty, tz = ecliptic_km_to_blender(st_tr.x, st_tr.y, st_tr.z)
             trail_spline.points[i].co = (tx, ty, tz, 1.0)
 
+        return hh, mm, ss, cur_km
+
+    if still is not None:
+        hh, mm, ss, cur_km = update_frame(still)
+        out = OUTPUT_DIR / f"solar_1_day_earth_loop_still_{still:04d}.png"
+        scene.render.filepath = str(out)
+        bpy.ops.render.render(write_still=True)
+        print(f"Still rendered: {out}")
+        return
+
+    print(f"\nStarting animation render ({f0} to {f1} of {TOTAL_FRAMES} frames)...")
+    FRAMES_DIR.mkdir(parents=True, exist_ok=True)
+
+    for f in range(f0, f1 + 1):
+        frame_file = FRAMES_DIR / f"frame_{f:06d}.png"
+        if frame_file.exists() and frame_file.stat().st_size > 0:
+            continue
+
+        hh, mm, ss, cur_km = update_frame(f)
+
         # Render frame
         scene.render.filepath = str(frame_file)
         bpy.ops.render.render(write_still=True)
 
         if f % 30 == 0 or f == 1:
             print(f"  Frame {f:3d}/600 ({f/600*100:5.1f}%) | Time: {hh:02d}:{mm:02d}:{ss:02d} | Dist: {cur_km:,.0f} km")
+
+    existing_count = len(list(FRAMES_DIR.glob("frame_*.png")))
+    if existing_count < TOTAL_FRAMES:
+        print(f"Partial range rendered ({existing_count}/{TOTAL_FRAMES} frames); skipping final MP4 encode.")
+        return
 
     print("\n✅ All 600 frames rendered!")
 
@@ -312,6 +329,7 @@ def build_animated_1day_scene():
             "-shortest",
         ])
     cmd.extend([
+        "-t", "20.0",
         "-c:v", "libx264",
         "-preset", "slow",
         "-crf", "18",
@@ -325,5 +343,16 @@ def build_animated_1day_scene():
     print(f"✅ Master 20s 1-Day Loop Video Complete: {master_mp4}")
 
 
+def main():
+    argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
+    parser = argparse.ArgumentParser(description="Render 1-Day Earth 24h diurnal & orbital loop")
+    parser.add_argument("--frames", nargs=2, type=int, help="Start and end frame range (1-indexed)")
+    parser.add_argument("--still", type=int, help="Render a single frame still")
+    args = parser.parse_args(argv)
+
+    f0, f1 = args.frames if args.frames else (1, TOTAL_FRAMES)
+    build_animated_1day_scene(f0=f0, f1=f1, still=args.still)
+
+
 if __name__ == "__main__":
-    build_animated_1day_scene()
+    main()
