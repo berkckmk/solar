@@ -11,6 +11,7 @@ Long versions (continuous clock, zoom into every planet and back out to the syst
     python3 generate.py --shared-clock-long --lang tr   # Format B: 9:09 eight-planet shared clock, 1920x1080
     Add --still 2400 7200 to render test frames only, --test 5850 for a 20 s test clip,
     --range START END for a range,
+    python3 generate.py --journey-v2-sample --lang tr    # v2 layout: 20 s sample (Mercury, 30 days)
     --res W H / --samples N to override quality.
 """
 
@@ -72,6 +73,63 @@ def long_render_args(args) -> list[str]:
     if args.test is not None:
         out += ["--test", str(args.test)]
     return out
+
+
+def _pillow_python() -> list[str] | None:
+    """A Python that has Pillow: this one, else Blender's own interpreter."""
+    if subprocess.run([sys.executable, "-c", "import PIL"], capture_output=True).returncode == 0:
+        return [sys.executable]
+    try:
+        blender = find_blender()
+    except RuntimeError:
+        return None
+    ok = subprocess.run([blender, "--background", "--python-exit-code", "1", "--python-expr", "import PIL"],
+                        capture_output=True).returncode == 0
+    return [blender, "--background", "--python"] if ok else None
+
+
+def run_journey_v2_sample(args):
+    """20 s v2 sample: 3D pass (Blender) + 2D layer (Pillow) + sound, composed by FFmpeg."""
+    sys.path.insert(0, str(PROJECT_DIR))
+    from render_io import output_dir, ffmpeg_exe
+    from journey_v2.timeline import Sample
+    from journey_v2 import audio
+
+    res = tuple(args.res) if args.res else (1920, 1080)
+    name = f"sample_mercury_30_{res[1]}p"
+    root = output_dir() / "v2" / name
+    py = _pillow_python()
+    if py is None:
+        print("Pillow is needed for the text layer. Install it once, then run again:\n"
+              f"  {sys.executable} -m pip install --user pillow")
+        sys.exit(2)
+
+    if not args.skip_3d:
+        run_blender_file("render_journey_v2.py", ["--res", str(res[0]), str(res[1]),
+                                                  "--samples", str(args.samples or 16), "--name", name,
+                                                  "--engine", args.engine])
+    ov_args = ["--res", str(res[0]), str(res[1]), "--lang", args.lang, "--name", name]
+    if args.debug:
+        ov_args.append("--debug")
+    if py[0] == sys.executable:
+        subprocess.run(py + [str(PROJECT_DIR / "overlay_v2.py")] + ov_args, check=True)
+    else:
+        subprocess.run(py + [str(PROJECT_DIR / "overlay_v2.py"), "--"] + ov_args, check=True)
+
+    wav = root / "audio.wav"
+    lufs, peak = audio.build(Sample(aspect=res[0] / res[1]), wav, ffmpeg_exe())
+    print(f"Audio: {lufs} LUFS, peak {peak} dBFS")
+
+    sub = f"overlay_{args.lang}" + ("_debug" if args.debug else "")
+    final = output_dir() / "final" / f"journey_v2_sample_{args.lang}_{res[1]}p{'_debug' if args.debug else ''}.mp4"
+    final.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run([ffmpeg_exe(), "-y", "-framerate", "30", "-i", str(root / "3d" / "frame_%06d.png"),
+                    "-framerate", "30", "-i", str(root / sub / "frame_%06d.png"), "-i", str(wav),
+                    "-filter_complex", "[0:v][1:v]overlay=format=auto,format=yuv420p[v]",
+                    "-map", "[v]", "-map", "2:a", "-c:v", "libx264", "-preset", "slow", "-crf", "18",
+                    "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", "-shortest", str(final)],
+                   check=True)
+    print(f"✅ {final}")
 
 
 def validate_science():
@@ -197,6 +255,12 @@ def main():
     parser.add_argument("--still", nargs="+", type=int, metavar="FRAME", help="Render test frames only")
     parser.add_argument("--test", type=int, metavar="START",
                         help="Render a fresh 20 s test clip starting at this frame and encode it")
+    parser.add_argument("--journey-v2-sample", action="store_true",
+                        help="Render the 20 s v2 sample (new layout, 2D text layer, sound)")
+    parser.add_argument("--skip-3d", action="store_true", help="v2: reuse rendered 3D frames")
+    parser.add_argument("--debug", action="store_true", help="v2: draw layout boxes (development)")
+    parser.add_argument("--engine", choices=("EEVEE", "CYCLES"), default="EEVEE",
+                        help="v2 3D pass engine (CYCLES is faster on machines without a GPU)")
     args = parser.parse_args()
 
     if args.validate:
@@ -211,6 +275,8 @@ def main():
         run_day1_loop()
     elif args.day1_speedup:
         run_day1_speedup()
+    elif args.journey_v2_sample:
+        run_journey_v2_sample(args)
     elif args.journey:
         run_blender_file("render_system_journey.py", long_render_args(args))
     elif args.shared_clock_long:

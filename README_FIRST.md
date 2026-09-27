@@ -61,6 +61,28 @@ Science behind the new detail: `science/attitude.py` gives each planet's real sp
 Surface spin faster than ~35° per frame (act III) is drawn rate-limited with the meridian stripe hidden;
 all on-screen numbers stay exact.
 
+## 1c. Journey v2 (20 s sample: Mercury, 30 Earth days)
+
+The new edit direction, first as one 20 s sample: question -> Mercury's orbit lights up and the
+camera settles -> one Earth clock runs the counter, the motion and every number -> readable result
+-> back to the whole system with time held, the result flies into its table row -> "same 30 days:
+Venus" with a labelled return to the start.
+
+```bash
+python3 -m pip install --user pillow          # once: the text layer is drawn with Pillow
+python3 projects/solar_system_time_journey/generate.py --journey-v2-sample --lang tr
+# faster preview: --res 1280 720 --samples 8 ; no GPU: add --engine CYCLES
+# text/layout change only: add --skip-3d (reuses the 3D frames) ; layout boxes: --debug
+```
+
+Two passes share one timeline (`journey_v2/timeline.py`) and one camera model (`journey_v2/camera.py`):
+`render_journey_v2.py` (Blender) draws only stars, Sun and planets; `overlay_v2.py` (plain Python)
+draws text, orbits, paths, arcs, labels and the table as transparent PNGs; FFmpeg lays one over the
+other and adds `journey_v2/audio.py`'s soundtrack. A wording change never needs a 3D re-render.
+`overlay_v2.py` also writes `qa_overlay_<lang>.json`: text/label/planet/Sun collisions and safe-area
+breaks per frame, and how far the Sun moves on screen (0 px whenever the camera holds).
+Output: `output/.../final/journey_v2_sample_<lang>_<H>p.mp4`.
+
 ---
 
 ## 2. Deliverables & Output Locations
