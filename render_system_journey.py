@@ -63,6 +63,7 @@ from render_shared_clock import (
     glow, set_alpha, new_curve, set_curve_points,
 )
 from render_io import output_dir, encode_frames
+from planet_look import shape as planet_shape, meridian_offset_deg
 
 FPS = 30
 LENS_MM = 35.0
@@ -476,8 +477,13 @@ def sunlit_group() -> bpy.types.NodeTree:
     ng = bpy.data.node_groups.new("SunLit", 'ShaderNodeTree')
     for name, kind in (("Color", 'NodeSocketColor'), ("Ambient", 'NodeSocketFloat'),
                        ("TwoSided", 'NodeSocketFloat'), ("RimColor", 'NodeSocketColor'),
-                       ("RimStrength", 'NodeSocketFloat')):
+                       ("RimStrength", 'NodeSocketFloat'),
+                       # optional surface detail (planet_look.py); all off by default
+                       ("Normal", 'NodeSocketVector'), ("UseNormal", 'NodeSocketFloat'),
+                       ("Night", 'NodeSocketColor'), ("Spec", 'NodeSocketFloat'),
+                       ("LimbDark", 'NodeSocketFloat')):
         ng.interface.new_socket(name, in_out='INPUT', socket_type=kind)
+    ng.interface.items_tree["Night"].default_value = (0.0, 0.0, 0.0, 1.0)
     ng.interface.new_socket("Emission", in_out='OUTPUT', socket_type='NodeSocketColor')
     n, l = ng.nodes, ng.links
     gi, go = n.new('NodeGroupInput'), n.new('NodeGroupOutput')
@@ -507,7 +513,15 @@ def sunlit_group() -> bpy.types.NodeTree:
         return node
 
     to_sun = vmath('NORMALIZE', vmath('SUBTRACT', sun.outputs[0], geo.outputs['Position']).outputs[0])
-    ndl = vmath('DOT_PRODUCT', geo.outputs['Normal'], to_sun.outputs[0]).outputs['Value']
+    # shading normal: the geometric one, or a bumped one where a material provides it
+    nrm = n.new('ShaderNodeMix')
+    nrm.data_type = 'VECTOR'
+    l.new(gi.outputs["UseNormal"], nrm.inputs['Factor'])
+    l.new(geo.outputs['Normal'], nrm.inputs[4])
+    l.new(gi.outputs["Normal"], nrm.inputs[5])
+    shade_n = vmath('NORMALIZE', nrm.outputs[1]).outputs[0]
+    ndl_geo = vmath('DOT_PRODUCT', geo.outputs['Normal'], to_sun.outputs[0]).outputs['Value']
+    ndl = vmath('DOT_PRODUCT', shade_n, to_sun.outputs[0]).outputs['Value']
     ndl_abs = fmath('ABSOLUTE', ndl).outputs[0]
     two = n.new('ShaderNodeMix')
     two.data_type = 'FLOAT'
@@ -526,29 +540,60 @@ def sunlit_group() -> bpy.types.NodeTree:
     light = fmath('MULTIPLY_ADD', lit.outputs[0], one_minus.outputs[0])
     l.new(gi.outputs["Ambient"], light.inputs[2])
 
+    # limb darkening (gas giants, Venus' clouds): 1 - LimbDark * facing^1.5
+    lw = n.new('ShaderNodeLayerWeight')
+    lw.inputs['Blend'].default_value = 0.5
+    limb = fmath('MULTIPLY', fmath('POWER', lw.outputs['Facing'], bval=1.5).outputs[0], gi.outputs["LimbDark"])
+    limb_k = fmath('SUBTRACT', 1.0, limb.outputs[0])
+    light_l = fmath('MULTIPLY', light.outputs[0], limb_k.outputs[0])
+
     shaded = n.new('ShaderNodeMix')
     shaded.data_type = 'RGBA'
     shaded.blend_type = 'MULTIPLY'
     shaded.inputs['Factor'].default_value = 1.0
     l.new(gi.outputs["Color"], shaded.inputs[6])
-    l.new(light.outputs[0], shaded.inputs[7])
+    l.new(light_l.outputs[0], shaded.inputs[7])
+
+    # night side emission (city lights): Night * (1 - daylight), from the geometric normal
+    dark = n.new('ShaderNodeMapRange')
+    dark.clamp = True
+    dark.inputs['From Min'].default_value = 0.10
+    dark.inputs['From Max'].default_value = -0.12
+    l.new(ndl_geo, dark.inputs['Value'])
+    night = n.new('ShaderNodeMix')
+    night.data_type = 'RGBA'
+    night.blend_type = 'ADD'
+    l.new(dark.outputs[0], night.inputs['Factor'])
+    l.new(shaded.outputs[2], night.inputs[6])
+    l.new(gi.outputs["Night"], night.inputs[7])
+
+    # sun glint on water: Spec * (N.H)^60 on the lit side
+    inc = n.new('ShaderNodeNewGeometry')
+    half = vmath('NORMALIZE', vmath('ADD', to_sun.outputs[0], inc.outputs['Incoming']).outputs[0])
+    ndh = fmath('MAXIMUM', vmath('DOT_PRODUCT', shade_n, half.outputs[0]).outputs['Value'], bval=0.0)
+    glint = fmath('MULTIPLY', fmath('POWER', ndh.outputs[0], bval=60.0).outputs[0], gi.outputs["Spec"])
+    glint_lit = fmath('MULTIPLY', glint.outputs[0], lit.outputs[0])
+    spec = n.new('ShaderNodeMix')
+    spec.data_type = 'RGBA'
+    spec.blend_type = 'ADD'
+    l.new(glint_lit.outputs[0], spec.inputs['Factor'])
+    l.new(night.outputs[2], spec.inputs[6])
+    spec.inputs[7].default_value = (1.0, 0.96, 0.88, 1.0)
 
     # Rim: facing^3, only where the Sun reaches (lit hemisphere + a little past it)
-    lw = n.new('ShaderNodeLayerWeight')
-    lw.inputs['Blend'].default_value = 0.5
     rim_pow = fmath('POWER', lw.outputs['Facing'], bval=3.0)
     rim_lit = n.new('ShaderNodeMapRange')
     rim_lit.clamp = True
     rim_lit.inputs['From Min'].default_value = -0.25
     rim_lit.inputs['From Max'].default_value = 0.3
-    l.new(ndl, rim_lit.inputs['Value'])
+    l.new(ndl_geo, rim_lit.inputs['Value'])
     rim_amt = fmath('MULTIPLY', rim_pow.outputs[0], rim_lit.outputs[0])
     rim_amt2 = fmath('MULTIPLY', rim_amt.outputs[0], gi.outputs["RimStrength"])
     rim = n.new('ShaderNodeMix')
     rim.data_type = 'RGBA'
     rim.blend_type = 'ADD'
     l.new(rim_amt2.outputs[0], rim.inputs['Factor'])
-    l.new(shaded.outputs[2], rim.inputs[6])
+    l.new(spec.outputs[2], rim.inputs[6])
     l.new(gi.outputs["RimColor"], rim.inputs[7])
     l.new(rim.outputs[2], go.inputs["Emission"])
     return ng
@@ -586,6 +631,9 @@ def convert_to_sunlit(mat: bpy.types.Material, ambient: float, two_sided: bool =
     grp.inputs["TwoSided"].default_value = 1.0 if two_sided else 0.0
     grp.inputs["RimColor"].default_value = (*rim[0], 1.0)
     grp.inputs["RimStrength"].default_value = rim[1]
+    if mat.get("textured"):                     # real maps: relief, night lights, glint, limb
+        from planet_look import wire_detail
+        wire_detail(mat, grp)
 
     em = nodes.new('ShaderNodeEmission')
     em.inputs['Strength'].default_value = strength
@@ -697,6 +745,7 @@ class Scene:
             body = primitive("uv_sphere", f"Body_{name}", segments=96, ring_count=48, radius=1.0)
             bpy.ops.object.shade_smooth()
             body.parent = frame
+            planet_shape(body, name)
             mat = build_planet_material(name)
             for node in mat.node_tree.nodes:
                 if node.type == 'MAPPING':
@@ -713,9 +762,10 @@ class Scene:
                 convert_to_sunlit(ring.active_material, ambient=0.2, two_sided=True, strength=1.0)
             k, n = spin_axis(name), orbit_normal(name)
             r_nom = planet_visual_radius(p.mean_radius_km)
+            basis = axis_basis(k, n)
             self.rigs[name] = {
                 "frame": frame, "body": body, "meridian": amount, "k": k, "n": n,
-                "basis": axis_basis(k, n), "r_nom": r_nom,
+                "basis": basis, "m0": meridian_offset_deg(name, basis), "r_nom": r_nom,
                 "size": (r_nom / planet_visual_radius(6371.0)) ** 0.35,
             }
 
@@ -867,7 +917,7 @@ class Scene:
             p = PLANETS[name]
             factor = spin_display_factor(shot, name)
             spin = 360.0 * c / abs(p.rotation_period_days) * factor
-            rig["body"].rotation_euler = (0.0, 0.0, math.radians(spin % 360.0))
+            rig["body"].rotation_euler = (0.0, 0.0, math.radians((spin + rig["m0"]) % 360.0))
             anno = smootherstep((w - 0.6) / 0.4) if name == focus else 0.0
             rig["meridian"].outputs[0].default_value = anno if factor >= 1.0 else 0.0
             rig["spin_factor"] = factor

@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFont
 
 from . import camera as C
 from . import layout as L
@@ -170,6 +170,23 @@ class Canvas:
         else:
             self.draw[layer].rectangle(b, outline=_rgba(rgb, alpha), width=max(1, round(self.S(width_frac))))
 
+    def disc_image(self, u, v, r_frac, img, alpha, layer="marks"):
+        """Round window: a dark backing disc with `img` (square RGBA) clipped to it."""
+        if alpha <= 0.01:
+            return
+        r = self.S(r_frac)
+        d = int(round(2 * r))
+        x0, y0 = int(round(self.X(u) - r)), int(round(self.Y(v) - r))
+        mask = Image.new("L", (d, d), 0)
+        ImageDraw.Draw(mask).ellipse((0, 0, d - 1, d - 1), fill=int(255 * alpha))
+        back = Image.new("RGBA", (d, d), (5, 7, 11, 0))
+        back.putalpha(mask.point(lambda m: int(m * 0.85)))
+        self.layers[layer].alpha_composite(back, (x0, y0))
+        if img is not None:
+            im = img.convert("RGBA").resize((d, d), Image.LANCZOS)
+            im.putalpha(ImageChops.multiply(im.getchannel("A"), mask))
+            self.layers[layer].alpha_composite(im, (x0, y0))
+
     def shade(self, side: str, extent: float, alpha: float):
         """Very light dark gradient behind a text column ('left', 'right', 'top')."""
         if alpha <= 0.01:
@@ -267,8 +284,9 @@ def _circle_box(u, v, r_frac, aspect):
 
 # ═══════════════════════════════════════════════════════════════════════
 class Overlay:
-    def __init__(self, sample: Sample, res, lang: str, debug: bool = False):
+    def __init__(self, sample: Sample, res, lang: str, debug: bool = False, inset_dir: Path | None = None):
         self.s, self.res, self.lang, self.debug = sample, res, lang, debug
+        self.inset_dir = inset_dir
         self.T = L.S[lang]
         self.N = L.NAMES[lang]
         self.aspect = res[0] / res[1]
@@ -362,6 +380,9 @@ class Overlay:
         if ui["angle_arc"] > 0.01 and c > 0:
             self._angle_arc(cv, pose, sun_uv, sun_r, P, c, m, ui["angle_arc"], bodies)
 
+        # close-up window (rendered by the 3D pass), before the labels are placed
+        self._inset(cv, ui, m, f)
+
         # screen-space text first, then planet labels placed around it
         self._top_band(cv, ui, c, t)
         self._info_column(cv, ui, m, c)
@@ -405,6 +426,29 @@ class Overlay:
             txt = self.n(m["swept_deg"], self.dec["deg"]) + "°"
             cv.text(lab[0], lab[1] + 0.009, txt, "SemiBold", 0.022, L.CLOCK, a, align="center",
                     kind="label", name="angle")
+
+    def _inset(self, cv, ui, m, f):
+        a = ui.get("inset", 0.0)
+        if a <= 0.01 or not self.s.inset:
+            return
+        u, v, r = self.s.inset
+        img = None
+        if self.inset_dir is not None:
+            p = self.inset_dir / f"frame_{f:06d}.png"
+            if p.exists():
+                img = Image.open(p)
+        cv.disc_image(u, v, r, img, a)
+        cv.circle(u, v, r, L.ACCENT[self.s.planet], 0.45 * a, 0.0016)
+        window, caption = self.s.inset_zones()
+        cv.boxes.append(("inset", "inset", window))
+        cv.boxes.append(("inset", "inset_caption", caption))
+        T = self.T
+        xr = u - r / self.aspect - 0.014                  # captions end just left of the window
+        cv.text(xr, v - r + 0.020, T["closeup"], "Medium", 0.0135, L.MUTED, 0.9 * a, align="right",
+                track=0.08, kind="text", name="inset_title")
+        spin = f'{T["spin"]}  {self.n(m["spin_deg"], 0)}°'
+        cv.text(xr, v - r + 0.050, spin, "Regular", 0.0165, L.WHITE, 0.9 * a, align="right",
+                kind="text", name="inset_spin")
 
     def _planet_labels(self, cv, pose, bodies, ui, t, sequential, occl, sun_uv, sun_r):
         s, N, P = self.s, self.N, self.s.planet
@@ -645,7 +689,7 @@ class Overlay:
 
     def _qa(self, cv, bodies, sun_uv, sun_r, ui):
         A = self.aspect
-        texts = [(k, n, b) for (k, n, b) in cv.boxes if k in ("text", "label", "note")]
+        texts = [(k, n, b) for (k, n, b) in cv.boxes if k in ("text", "label", "note", "inset")]
         issues = []
         P = self.s.planet
         sel = bodies.get(P)
@@ -669,7 +713,7 @@ class Overlay:
                 if _overlap(b1, b2):
                     issues.append(("label_overlap", f"{n1}/{n2}"))
             for k, n, b in cv.boxes:
-                if k == "text" and _overlap(b1, b):
+                if k in ("text", "inset") and _overlap(b1, b):
                     issues.append(("label_on_text", f"{n1}/{n}"))
             for name, (u, v, r) in bodies.items():
                 if name != n1 and _overlap(b1, _circle_box(u, v, r, A)):

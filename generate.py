@@ -173,7 +173,9 @@ def run_final_pipeline(frame_range: tuple[int, int] | None = None):
     final_dir.mkdir(parents=True, exist_ok=True)
     master_mp4 = final_dir / "solar_system_1_30_365_days_1440p.mp4"
 
-    audio_file = PROJECT_DIR / "assets" / "audio" / "deep_space_ambience.wav"
+    from soundtrack import prepare
+    n_frames = len(list(frames_dir.glob("frame_*.png")))
+    audio_file = prepare(n_frames / 30.0, master_mp4) or PROJECT_DIR / "assets" / "audio" / "deep_space_ambience.wav"
     has_audio = audio_file.exists()
 
     cmd = [
@@ -202,6 +204,8 @@ def run_final_pipeline(frame_range: tuple[int, int] | None = None):
 
     print(f"\nEncoding 1440p master video: {master_mp4}")
     subprocess.run(cmd, check=True)
+    if audio_file.name.endswith(".music.wav"):
+        audio_file.unlink(missing_ok=True)
     print(f"\n✅ 9:25 Master Video Render Complete: {master_mp4}")
 
 
@@ -215,11 +219,12 @@ def run_day1_loop():
 def run_day1_speedup():
     """Extract Act 1 (1 Earth Day) and speed it up to 20 seconds."""
     master_mp4 = OUTPUT_DIR / "final" / "solar_system_1_30_365_days_1440p.mp4"
-    audio_wav = PROJECT_DIR / "assets" / "audio" / "deep_space_ambience.wav"
     out_mp4 = OUTPUT_DIR / "final" / "solar_1_day_act_speedup_20s.mp4"
     if not master_mp4.exists():
         print(f"ERROR: Master video not found at {master_mp4}")
         return
+    from soundtrack import prepare
+    audio_wav = prepare(20.0, out_mp4) or PROJECT_DIR / "assets" / "audio" / "deep_space_ambience.wav"
     cmd = [
         "ffmpeg", "-y",
         "-ss", "25.0", "-to", "183.0",
@@ -233,6 +238,8 @@ def run_day1_speedup():
         str(out_mp4),
     ]
     subprocess.run(cmd, check=True)
+    if audio_wav.name.endswith(".music.wav"):
+        audio_wav.unlink(missing_ok=True)
     print(f"✅ Generated: {out_mp4}")
 
 

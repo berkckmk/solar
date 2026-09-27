@@ -10,11 +10,12 @@ from __future__ import annotations
 import math
 
 import bpy
-from mathutils import Matrix
+from mathutils import Matrix, Vector
 
 from science.planet_data import PLANETS, PLANET_ORDER
 from science.attitude import spin_axis, orbit_normal
 from blender_build import clear_scene, setup_render_settings, build_planet_material, create_saturn_rings
+from planet_look import shape as planet_shape, meridian_offset_deg
 from render_system_journey import (
     sunlit_group, convert_to_sunlit, MAP_SCALE, RIM, axis_basis,
 )
@@ -23,6 +24,9 @@ from . import camera as C
 from .timeline import FPS, pos
 
 MAX_SPIN_DEG_PER_FRAME = 35.0
+INSET_LENS_MM = 85.0          # close-up: long lens, little perspective distortion
+INSET_FILL = 0.80             # planet (or ring) diameter / window diameter
+INSET_SAMPLES = 64
 
 
 def _new_mat(name: str):
@@ -156,6 +160,7 @@ def build_planets():
         body.name = f"Body_{name}"
         bpy.ops.object.shade_smooth()
         body.parent = frame
+        planet_shape(body, name)
         mat = build_planet_material(name)
         for node in mat.node_tree.nodes:
             if node.type == 'MAPPING':
@@ -168,8 +173,9 @@ def build_planets():
             ring.location = (0.0, 0.0, 0.0)
             ring.rotation_euler = (0.0, 0.0, 0.0)
             convert_to_sunlit(ring.active_material, ambient=0.2, two_sided=True, strength=1.0)
+        basis = axis_basis(spin_axis(name), orbit_normal(name))
         rigs[name] = {"frame": frame, "body": body, "parts": [body] + ([ring] if name == "saturn" else []),
-                      "basis": axis_basis(spin_axis(name), orbit_normal(name))}
+                      "basis": basis, "m0": meridian_offset_deg(name, basis)}
     return rigs
 
 
@@ -194,6 +200,12 @@ class Scene3D:
         sc.camera = self.cam
         self.sun, self.halo = build_sun()
         self.rigs = build_planets()
+        inset_data = bpy.data.cameras.new("InsetCam")
+        inset_data.lens = INSET_LENS_MM
+        inset_data.sensor_fit = 'HORIZONTAL'
+        inset_data.sensor_width = C.SENSOR_MM
+        self.inset_cam = bpy.data.objects.new("InsetCam", inset_data)
+        bpy.context.collection.objects.link(self.inset_cam)
         for name, rig in self.rigs.items():        # planets outside the segment stay out of frame
             for obj in rig["parts"]:
                 obj.hide_render = name not in sample.shown
@@ -241,4 +253,44 @@ class Scene3D:
             p = pos(name, days)
             r = world_radius(s.planet_px(name, t), p)
             rig["frame"].matrix_world = Matrix.Translation(p) @ rig["basis"] @ Matrix.Scale(r, 4)
-            rig["body"].rotation_euler = (0.0, 0.0, math.radians(self.spin[name][min(f, s.frames)] % 360.0))
+            spin = self.spin[name][min(f, s.frames)] + rig["m0"]
+            rig["body"].rotation_euler = (0.0, 0.0, math.radians(spin % 360.0))
+
+    def render_inset(self, f: int, path: str, px: int):
+        """Close-up of the selected planet for the 2D layer's round window: same
+        viewing direction as the main camera (so the lit phase matches), the
+        planet's real axis, spin and lighting, transparent background."""
+        s = self.sample
+        rig = self.rigs[s.planet]
+        centre = rig["frame"].matrix_world.translation.copy()
+        extent = rig["frame"].matrix_world.to_scale()[0] * (2.35 if s.planet == "saturn" else 1.0)
+        pose = s.pose(f / FPS)
+        tan_half = 0.5 * C.SENSOR_MM / INSET_LENS_MM
+        dist = extent / (INSET_FILL * tan_half)
+        rot = Matrix(pose.matrix_rows()).to_4x4()
+        back = Vector(pose.back)
+        self.inset_cam.matrix_world = Matrix.Translation(centre + back * dist) @ rot
+        self.inset_cam.data.clip_start = dist * 0.05
+        self.inset_cam.data.clip_end = dist * 3.0
+
+        sc = bpy.context.scene
+        keep = (sc.camera, sc.render.resolution_x, sc.render.resolution_y, sc.render.film_transparent)
+        samples = (sc.cycles.samples, sc.eevee.taa_render_samples)
+        hidden = [self.sun, self.halo] + [o for n, r in self.rigs.items() if n != s.planet for o in r["parts"]]
+        was = [o.hide_render for o in hidden]
+        try:
+            for o in hidden:
+                o.hide_render = True
+            sc.camera = self.inset_cam
+            sc.render.resolution_x = sc.render.resolution_y = px
+            sc.render.film_transparent = True
+            sc.cycles.samples = max(samples[0], INSET_SAMPLES)       # small image: clean it up cheaply
+            sc.eevee.taa_render_samples = max(samples[1], INSET_SAMPLES)
+            sc.render.filepath = path
+            bpy.ops.render.render(write_still=True)
+        finally:
+            for o, h in zip(hidden, was):
+                o.hide_render = h
+            sc.camera, sc.render.resolution_x, sc.render.resolution_y, sc.render.film_transparent = keep
+            sc.cycles.samples, sc.eevee.taa_render_samples = samples
+

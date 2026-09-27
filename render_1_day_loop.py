@@ -313,7 +313,8 @@ def build_animated_1day_scene(f0: int = 1, f1: int = TOTAL_FRAMES, still: int | 
     # FFmpeg assembly
     FINAL_DIR.mkdir(parents=True, exist_ok=True)
     master_mp4 = FINAL_DIR / "solar_1_day_earth_24h_loop_20s.mp4"
-    audio_wav = PROJECT_DIR / "assets" / "audio" / "deep_space_ambience.wav"
+    from soundtrack import prepare
+    audio_wav = prepare(20.0, master_mp4) or PROJECT_DIR / "assets" / "audio" / "deep_space_ambience.wav"
 
     cmd = [
         "ffmpeg", "-y",
@@ -340,6 +341,8 @@ def build_animated_1day_scene(f0: int = 1, f1: int = TOTAL_FRAMES, still: int | 
 
     print(f"\nEncoding 20s 1-Day Loop Video: {master_mp4}")
     subprocess.run(cmd, check=True)
+    if audio_wav.name.endswith(".music.wav"):
+        audio_wav.unlink(missing_ok=True)
     print(f"✅ Master 20s 1-Day Loop Video Complete: {master_mp4}")
 
 

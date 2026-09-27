@@ -48,6 +48,10 @@ def main():
         rs.cycles.use_denoising = False
         rs.cycles.max_bounces = 0
         rs.render.film_transparent = False
+        # Cycles samples textures without mipmaps: cap them near the largest on-screen
+        # use (the close-up) so small planets don't sparkle (EEVEE mipmaps on its own)
+        rs.render.use_simplify = True
+        rs.cycles.texture_limit_render = '1024' if args.res[1] <= 1080 else '2048'
 
     if args.stills:
         todo = sorted({min(sample.frames - 1, round(s * FPS)) for s in args.stills})
@@ -55,15 +59,27 @@ def main():
         f0, f1 = args.frames if args.frames else (0, sample.frames - 1)
         todo = range(f0, f1 + 1)
 
+    inset_dir = root / "inset"
+    inset_dir.mkdir(exist_ok=True)
+    inset_px = round(2 * sample.inset[2] * args.res[1]) if sample.inset else 0
+
+    def done(p):
+        return p.exists() and p.stat().st_size > 0 and not args.stills
+
     timings = []
     for f in todo:
         path = frames_dir / f"frame_{f:06d}.png"
-        if path.exists() and path.stat().st_size > 0 and not args.stills:
+        ipath = inset_dir / f"frame_{f:06d}.png"
+        want_inset = inset_px > 0 and sample.ui(f / FPS)["inset"] > 0.001
+        if done(path) and (not want_inset or done(ipath)):
             continue
         t0 = time.perf_counter()
         scene.update(f)
-        rs.render.filepath = str(path)
-        bpy.ops.render.render(write_still=True)
+        if not done(path):
+            rs.render.filepath = str(path)
+            bpy.ops.render.render(write_still=True)
+        if want_inset and not done(ipath):
+            scene.render_inset(f, str(ipath), inset_px)
         timings.append((f, time.perf_counter() - t0))
         if f % 30 == 0:
             print(f"  3d frame {f}/{sample.frames - 1}  {timings[-1][1]:.2f}s")

@@ -81,7 +81,35 @@ draws text, orbits, paths, arcs, labels and the table as transparent PNGs; FFmpe
 other and adds `journey_v2/audio.py`'s soundtrack. A wording change never needs a 3D re-render.
 `overlay_v2.py` also writes `qa_overlay_<lang>.json`: text/label/planet/Sun collisions and safe-area
 breaks per frame, and how far the Sun moves on screen (0 px whenever the camera holds).
+While the camera is on the planet, a round "close-up" window shows it large (rendered by the 3D pass
+from the same viewing direction: real map, axis, spin and day/night), with the live spin counter.
 Output: `output/.../final/journey_v2_sample_<lang>_<H>p.mp4`.
+
+## 1d. Planet surfaces and music (all formats)
+
+**Planets** use real surface maps (Solar System Scope, CC BY 4.0, from NASA data; see
+`assets/textures/CREDITS.md`) through `planet_look.py`: relief near the day/night line, Earth's city
+lights, clouds and ocean glint, Venus' cloud deck, limb darkening, real oblateness, Saturn's real ring
+profile, and each map turned to the IAU prime meridian (Greenwich has local noon at J2000.0).
+The repository ships 4K maps. Optional 8K originals and memory control:
+
+```bash
+python3 projects/solar_system_time_journey/tools/download_textures.py     # 8K originals, ~60 MB (git-ignored)
+SOLAR_TEX=4k python3 ...    # cap map size (8k > 4k > 2k is picked by default); SOLAR_TEX=off: old procedural look
+```
+
+**Music**: every video gets the calm, original score `assets/audio/music/solar_calm_10min.m4a`
+(made by `tools/make_music.py`) through `soundtrack.py`, at -17 LUFS. Videos longer than 2 minutes
+start it from the top (longer than 10 minutes: it continues with a cross-fade); tests and 20 s samples
+start at a random point, printed so a take can be repeated:
+
+```bash
+SOLAR_MUSIC_OFFSET=190.4 python3 ...        # same music start as a previous test
+SOLAR_MUSIC=~/Music/my_track.mp3 python3 ... # use your own track instead
+```
+
+The v2 sample adds only soft cues under the music: a low "breath" on camera moves, one quiet chime
+when the clock reaches its target, and an in-key glide under the labelled rewind.
 
 ---
 

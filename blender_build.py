@@ -321,7 +321,12 @@ def create_sun():
 # ═══════════════════════════════════════════════════════════════════════
 
 def build_planet_material(name: str) -> bpy.types.Material:
-    """Create rich procedural PBR materials tailored to each planet's real appearance."""
+    """Planet material: the real surface maps when they are installed (planet_look.py),
+    otherwise rich procedural PBR materials tailored to each planet's appearance."""
+    from planet_look import textured_material
+    tex = textured_material(name)
+    if tex is not None:
+        return tex
     mat = bpy.data.materials.new(f"Planet_{name.capitalize()}_Mat")
     mat.use_nodes = True
     nodes = mat.node_tree.nodes
@@ -646,7 +651,8 @@ def create_saturn_rings(saturn_obj, vis_r: float):
     output.location = (1000, 0)
     links.new(bsdf.outputs['BSDF'], output.inputs['Surface'])
 
-    ring.data.materials.append(mat)
+    from planet_look import ring_material       # the real ring profile, when installed
+    ring.data.materials.append(ring_material(vis_r) or mat)
     return ring
 
 
@@ -1292,7 +1298,9 @@ def run_final_render(resolution: tuple = FINAL_RES, samples: int = 16,
 
     # FFmpeg assembly
     master_mp4 = final_dir / "solar_system_1_30_365_days_1440p.mp4"
-    audio_wav = ASSETS_DIR / "audio" / "deep_space_ambience.wav"
+    from soundtrack import prepare
+    audio_wav = (prepare(len(list(frames_dir.glob("frame_*.png"))) / FPS, master_mp4)
+                 or ASSETS_DIR / "audio" / "deep_space_ambience.wav")
 
     if shutil.which("ffmpeg"):
         cmd = [
@@ -1318,6 +1326,8 @@ def run_final_render(resolution: tuple = FINAL_RES, samples: int = 16,
         ])
         print(f"\nEncoding master video: {master_mp4}")
         subprocess.run(cmd, check=True)
+        if audio_wav.name.endswith(".music.wav"):
+            audio_wav.unlink(missing_ok=True)
         print(f"✅ Final 9:25 1440p Master Video Ready: {master_mp4}")
 
 

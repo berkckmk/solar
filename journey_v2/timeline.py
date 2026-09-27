@@ -119,6 +119,9 @@ class Sample:
         self.focus = C.View(tgt, back, C.fit_distance(fp, tgt, back, rect, aspect),
                             L.center(L.FOCUS_AREA))
 
+        # close-up window (the real planet, spinning): a free corner of the focus area
+        self.inset = self._place_inset()
+
         # Kepler note: only when the speed visibly changes during the run
         v0 = metrics(planet, days, 0.0)["speed"]
         v1 = metrics(planet, days, days)["speed"]
@@ -143,6 +146,39 @@ class Sample:
                 if uv and uv[0] + r / aspect > col[0] and uv[0] - r / aspect < col[2] \
                         and uv[1] + r > col[1] and uv[1] - r < col[3]:
                     self.table_in = t + 1.0 / FPS
+
+    def _place_inset(self):
+        """(u, v, radius) of the close-up window, as fractions of the frame (radius of
+        frame height), or None. It must stay clear of the whole selected orbit, the
+        planet's size and the Sun, so it never covers what the counter talks about."""
+        pose = C.still(self.focus, self.aspect)
+        pts = [q for q in (C.project(pose, p) for p in orbit_points(self.planet, 240)) if q]
+        sun = C.project(pose, (0.0, 0.0, 0.0))
+        area, A, m = L.FOCUS_AREA, self.aspect, 0.012
+        for d in (0.26, 0.23, 0.20, 0.17):
+            r = d / 2
+            for cx, cy in ((area[2] - r / A - m, area[1] + r + m),        # top right
+                           (area[2] - r / A - m, area[3] - r - 0.045),    # bottom right (caption below)
+                           (area[0] + r / A + m, area[1] + r + m)):       # top left
+                clear = min(math.hypot((u - cx) * A, v - cy) for u, v, _ in pts)
+                cap = self.inset_zones((cx, cy, r))[1]
+                gap = min(math.hypot(max(cap[0] - u, 0.0, u - cap[2]) * A, max(cap[1] - v, 0.0, v - cap[3]))
+                          for u, v, _ in pts)
+                if clear > r + L.PX["focus_planet"] + 0.035 and gap > L.PX["focus_planet"] + 0.01 and \
+                        cap[0] > L.INFO_COL[2] + 0.02 and math.hypot((sun[0] - cx) * A, sun[1] - cy) > r + 0.08:
+                    return (cx, cy, r)
+        return None
+
+    CAPTION_W = 0.105       # width reserved for the two caption lines (fraction of frame width)
+
+    def inset_zones(self, inset=None):
+        """Two rectangles nothing else may enter: the close-up window (with a margin)
+        and its caption block, set against the window's upper left edge."""
+        cx, cy, r = inset or self.inset
+        m = 0.012
+        x0 = cx - r / self.aspect
+        return ((x0 - m, cy - r - m, cx + r / self.aspect + m, cy + r + m),
+                (x0 - 0.014 - self.CAPTION_W, cy - r, x0 - 0.006, cy - r + 0.068))
 
     # simulation clock
     def days_at(self, t: float) -> float:
@@ -219,6 +255,9 @@ class Sample:
             "next": ramp(t, 18.0, 18.4),
             "rewind": ramp(t, 18.55, 18.75) * (1.0 - ramp(t, 19.75, 19.95)),
             "scale_note": ramp(t, 0.3, 0.8),
+            # close-up: once the camera has settled, gone before it pulls back
+            "inset": (ramp(t, 4.3, 4.9) * (1.0 - ramp(t, self.CAM_OUT[0] - 0.4, self.CAM_OUT[0]))
+                      if self.inset else 0.0),
             "focus": fw,
         }
         if self.kepler_t is not None:

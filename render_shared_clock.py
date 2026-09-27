@@ -60,6 +60,7 @@ from blender_build import (
     create_saturn_rings,
 )
 from render_io import output_dir, encode_frames
+from planet_look import shape as planet_shape
 
 OUTPUT_DIR = output_dir()
 
@@ -591,6 +592,7 @@ def build_scene(res: tuple[int, int], samples: int, lang: str, tl):
         body = bpy.context.active_object
         body.name = f"Body_{name}"
         bpy.ops.object.shade_smooth()
+        planet_shape(body, name)
         mat = build_planet_material(name)
         meridian = add_meridian_markers(mat)
         body.data.materials.append(mat)

@@ -113,7 +113,7 @@ _register(
     eccentricity         = 0.016_710_22,
     inclination_deg      = 0.000_05,
     long_ascending_node_deg = -11.260_64,
-    arg_periapsis_deg    = 102.947_19,
+    arg_periapsis_deg    = 114.207_83,   # ω = ϖ (102.93768) − Ω (−11.26064); 102.947 is ϖ, not ω
     mean_anomaly_deg     = 357.517_6,
     orbital_period_days  = 365.256_36,
     mass_kg              = 5.972_4e24,

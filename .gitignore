@@ -7,3 +7,7 @@ __pycache__/
 .DS_Store
 *.blend1
 *.blend2
+
+# Full-resolution planet maps from tools/download_textures.py (the 4K copies are committed)
+assets/textures/8k_*
+assets/textures/*.part

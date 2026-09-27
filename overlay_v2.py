@@ -44,8 +44,8 @@ def main():
     args = ap.parse_args(argv)
 
     sample = Sample(aspect=args.res[0] / args.res[1])
-    ov = Overlay(sample, tuple(args.res), args.lang, args.debug)
     root = output_dir() / "v2" / args.name
+    ov = Overlay(sample, tuple(args.res), args.lang, args.debug, inset_dir=root / "inset")
     sub = f"overlay_{args.lang}" + ("_debug" if args.debug else "")
     out = root / sub
     out.mkdir(parents=True, exist_ok=True)

@@ -29,14 +29,14 @@ try:
     from science.metrics import compute_all_metrics, INTERVALS
     from science.coordinates import ecliptic_km_to_blender
     from science.rotation import solar_day_days, shared_clock_table
-    from science.attitude import obliquity_deg
+    from science.attitude import obliquity_deg, prime_meridian, OBLIQUITY_J2000_DEG
 except ImportError:
     from planet_data import PLANETS, PLANET_ORDER  # type: ignore
     from kepler import heliocentric_position, orbital_arc_length  # type: ignore
     from metrics import compute_all_metrics, INTERVALS  # type: ignore
     from coordinates import ecliptic_km_to_blender  # type: ignore
     from rotation import solar_day_days, shared_clock_table  # type: ignore
-    from attitude import obliquity_deg  # type: ignore
+    from attitude import obliquity_deg, prime_meridian, OBLIQUITY_J2000_DEG  # type: ignore
 
 
 def validate_all() -> list[str]:
@@ -143,6 +143,20 @@ def validate_all() -> list[str]:
         exp = PLANETS[name].axial_tilt_deg
         if abs(got - exp) > 0.1:
             errors.append(f"{name} obliquity from IAU pole = {got:.2f}°, expected {exp}°")
+
+    # ── 9. Earth at J2000.0: heliocentric longitude and local noon at Greenwich ──
+    st = heliocentric_position(PLANETS["earth"], 0.0)
+    lon = math.degrees(math.atan2(st.y, st.x)) % 360.0
+    if abs(lon - 100.46) > 0.3:          # JPL: L = 100.464 deg, true longitude ~100.4
+        errors.append(f"Earth longitude at J2000 = {lon:.2f}°, expected ~100.4°")
+    e = math.radians(OBLIQUITY_J2000_DEG)
+
+    def ra(v):
+        return math.degrees(math.atan2(v[1] * math.cos(e) - v[2] * math.sin(e), v[0]))
+
+    ha = (ra(prime_meridian("earth", 0.0)) - ra((-st.x, -st.y, -st.z)) + 180.0) % 360.0 - 180.0
+    if abs(ha) > 2.0:                    # 12:00 TT on 1 Jan 2000: Sun on the Greenwich meridian (EoT ~ -1°)
+        errors.append(f"Sun's hour angle at Greenwich, J2000 = {ha:+.2f}°, expected within ±2°")
 
     return errors
 

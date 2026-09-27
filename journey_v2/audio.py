@@ -1,14 +1,16 @@
-"""Sound for the v2 sample (standard library only, so it runs on any Python).
+"""Sound for the v2 sample (standard library + FFmpeg, runs on any Python).
 
 Layers:
-  - the existing deep-space ambience as a low, steady bed (no loop dips: taken
-    from its middle and cross-faded if the piece is longer than the file; its
-    slow 6 dB "breathing" is levelled out)
-  - a soft whoosh when the camera moves in / out (filtered noise sweep)
+  - the calm score (soundtrack.py) as the bed, from a random point of the track
+    (printed; repeat a take with SOLAR_MUSIC_OFFSET); if no score is installed,
+    the old deep-space ambience, levelled, is used instead
+  - a soft, low "breath" when the camera moves in / out: dark filtered noise
+    (180-650 Hz), smooth envelope, well under the music; nothing in the harsh
+    1-4 kHz band
   - one gentle chime when the experiment reaches its target time
-  - a short descending glide under the labelled rewind
+  - a quiet, in-key glide (A4 -> A3) under the labelled rewind
 No sounds on digit changes. Every layer is measured on its own (EBU R128) and
-set to a fixed level, so the balance does not depend on the source files.
+set to a fixed level under the bed, so the balance does not depend on the files.
 """
 
 from __future__ import annotations
@@ -84,25 +86,25 @@ def _level(L, R, block_s=0.05, window_s=2.0, max_gain=2.0):
         R[j] *= g
 
 
-def _whoosh(dur: float, rising: bool, seed: int):
-    """Band-limited noise whose band sweeps up (or down), swelling then fading."""
+def _swell(dur: float, rising: bool, seed: int):
+    """Soft 'breath': low-passed noise whose (low) cut-off drifts up or down, with a
+    raised-sine envelope. Two independent noises keep it wide without panning."""
     rnd = random.Random(seed)
     n = int(dur * RATE)
     l, r = [0.0] * n, [0.0] * n
-    lp1 = lp2 = 0.0
+    st = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]                      # per channel: lp1, lp2, dc
     for j in range(n):
         u = j / n
-        f = 250 + 2300 * (u if rising else 1 - u) ** 1.3
-        a1 = 1 - math.exp(-2 * math.pi * f / RATE)
-        a2 = 1 - math.exp(-2 * math.pi * f * 0.35 / RATE)
-        x = rnd.uniform(-1, 1)
-        lp1 += a1 * (x - lp1)
-        lp2 += a2 * (x - lp2)
-        band = lp1 - lp2
-        env = math.sin(math.pi * u) ** 1.6
-        pan = 0.5 + 0.35 * (u - 0.5) * (1 if rising else -1)
-        v = band * env * 1.6
-        l[j], r[j] = v * (1 - pan) * 1.4, v * pan * 1.4
+        f = 180.0 + 470.0 * (u if rising else 1.0 - u) ** 1.5
+        a = 1.0 - math.exp(-2.0 * math.pi * f / RATE)
+        env = math.sin(math.pi * u) ** 2
+        for c, out in ((0, l), (1, r)):
+            x = rnd.uniform(-1.0, 1.0)
+            s0 = st[c]
+            s0[0] += a * (x - s0[0])
+            s0[1] += a * (s0[0] - s0[1])
+            s0[2] += 0.0071 * (s0[1] - s0[2])                     # remove rumble below ~50 Hz
+            out[j] = (s0[1] - s0[2]) * env
     return l, r
 
 
@@ -118,18 +120,15 @@ def _chime(dur: float):
 
 
 def _glide(dur: float, seed: int):
-    rnd = random.Random(seed)
+    """Descending sine A4 -> A3 with a soft second harmonic, raised-sine envelope."""
     n = int(dur * RATE)
     l, r = [0.0] * n, [0.0] * n
     ph = 0.0
-    lp = 0.0
     for j in range(n):
         u = j / n
-        f = 700 * (1 - u) + 220 * u
+        f = 440.0 * 2 ** (-u)
         ph += 2 * math.pi * f / RATE
-        env = math.sin(math.pi * u) ** 1.2
-        lp += 0.08 * (rnd.uniform(-1, 1) - lp)
-        v = (0.55 * math.sin(ph) + 0.8 * lp) * env
+        v = (math.sin(ph) + 0.15 * math.sin(2 * ph)) * math.sin(math.pi * u) ** 2
         l[j], r[j] = v, v
     return l, r
 
@@ -165,10 +164,10 @@ def _loudness(path: Path, ffmpeg: str):
 
 
 # target levels (LUFS, each layer measured on its own over its own length)
-BED_LUFS = -25.0
-WHOOSH_LUFS = -21.0
-ACCENT_LUFS = -17.0
-REWIND_LUFS = -22.0
+BED_LUFS = -20.0             # the music
+SWELL_LUFS = -33.0           # camera moves: 13 dB under the music
+ACCENT_LUFS = -27.0          # target reached
+REWIND_LUFS = -33.0
 
 
 def _scaled(layer, path: Path, ffmpeg: str, target: float):
@@ -181,16 +180,24 @@ def _scaled(layer, path: Path, ffmpeg: str, target: float):
     return [x * g for x in layer[0]], [x * g for x in layer[1]]
 
 
-def build(sample, path: Path, ffmpeg: str, master_lufs: float = -18.0, peak_limit: float = -1.5):
+def build(sample, path: Path, ffmpeg: str, master_lufs: float = -17.0, peak_limit: float = -1.5):
     """Write the sample's soundtrack and return its measured (LUFS, peak dBFS).
     The balance between layers is fixed above; the whole mix is then raised or
     lowered towards `master_lufs` without letting the peak pass `peak_limit`."""
-    L, R = _scaled(_bed(sample.DUR), path, ffmpeg, BED_LUFS)
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    import soundtrack
+    music = path.with_name(path.stem + ".music.wav")
+    if soundtrack.build(music, sample.DUR, "auto", target_lufs=BED_LUFS):
+        L, R = _read_wav(music)
+        music.unlink()
+    else:
+        L, R = _scaled(_bed(sample.DUR), path, ffmpeg, BED_LUFS)
     for i, (kind, t0, dur) in enumerate(sample.audio_events()):
         if kind == "whoosh_in":
-            _mix_into(L, R, _scaled(_whoosh(dur + 0.4, True, 11 + i), path, ffmpeg, WHOOSH_LUFS), t0 - 0.15, 1.0)
+            _mix_into(L, R, _scaled(_swell(dur + 0.8, True, 11 + i), path, ffmpeg, SWELL_LUFS), t0 - 0.3, 1.0)
         elif kind == "whoosh_out":
-            _mix_into(L, R, _scaled(_whoosh(dur + 0.4, False, 11 + i), path, ffmpeg, WHOOSH_LUFS), t0 - 0.1, 1.0)
+            _mix_into(L, R, _scaled(_swell(dur + 0.8, False, 11 + i), path, ffmpeg, SWELL_LUFS), t0 - 0.2, 1.0)
         elif kind == "accent":
             _mix_into(L, R, _scaled(_chime(dur), path, ffmpeg, ACCENT_LUFS), t0, 1.0)
         elif kind == "rewind":

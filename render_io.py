@@ -30,14 +30,29 @@ def ffmpeg_exe() -> str:
 
 
 def encode_frames(frames_dir: Path, mp4: Path, fps: int = 30, start_number: int = 0,
-                  audio: Path | None = AUDIO_WAV) -> Path:
-    """Encode `frame_%06d.png` into an H.264 master, looping the ambient audio under it."""
+                  audio: Path | str | None = "music") -> Path:
+    """Encode `frame_%06d.png` into an H.264 master with sound under it.
+
+    audio="music": the calm score from soundtrack.py (random start for short tests,
+    from the top for long videos); a Path: that file, looped; None: silent.
+    """
     mp4.parent.mkdir(parents=True, exist_ok=True)
     cmd = [ffmpeg_exe(), "-y", "-framerate", str(fps), "-start_number", str(start_number),
            "-i", str(frames_dir / "frame_%06d.png")]
-    if audio is not None and audio.exists():
-        cmd += ["-stream_loop", "-1", "-i", str(audio), "-c:a", "aac", "-b:a", "192k", "-shortest"]
+    temp = None
+    if audio == "music":
+        from soundtrack import prepare
+        n = len(list(frames_dir.glob("frame_*.png")))
+        temp = prepare(n / fps, mp4)
+        audio = temp if temp is not None else AUDIO_WAV
+    if audio is not None and Path(audio).exists():
+        cmd += (["-i", str(audio)] if temp is not None else ["-stream_loop", "-1", "-i", str(audio)])
+        cmd += ["-c:a", "aac", "-b:a", "192k", "-shortest"]
     cmd += ["-c:v", "libx264", "-preset", "slow", "-crf", "18", "-pix_fmt", "yuv420p",
             "-movflags", "+faststart", str(mp4)]
-    subprocess.run(cmd, check=True)
+    try:
+        subprocess.run(cmd, check=True)
+    finally:
+        if temp is not None:
+            temp.unlink(missing_ok=True)
     return mp4

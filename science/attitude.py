@@ -71,6 +71,33 @@ def orbit_normal(name: str) -> Vec3:
     return (math.sin(i) * math.sin(node), -math.sin(i) * math.cos(node), math.cos(i))
 
 
+# IAU WGCCRE 2009 prime-meridian angle W = W0 + rate * d (degrees, d = days from
+# J2000), measured eastward along the planet's equator from its node Q on the
+# ICRF equator. Small periodic terms (Mercury's libration) are left out.
+IAU_PRIME_MERIDIAN: dict[str, tuple[float, float]] = {
+    "mercury": (329.5469, 6.1385025),
+    "venus":   (160.20, -1.4813688),
+    "earth":   (190.147, 360.9856235),
+    "mars":    (176.630, 350.89198226),
+    "jupiter": (284.95, 870.5360000),          # System III
+    "saturn":  (38.90, 810.7939024),
+    "uranus":  (203.81, -501.1600928),
+    "neptune": (253.18 - 0.48 * math.sin(_N_NEPTUNE), 536.3128492),
+}
+
+
+def prime_meridian(name: str, days: float) -> Vec3:
+    """Unit vector (ecliptic frame) from the planet's centre through its prime
+    meridian on the equator, `days` after J2000 (IAU definition)."""
+    ra, dec = (math.radians(a) for a in IAU_NORTH_POLE_RADEC[name])
+    p = iau_north_pole(name)
+    q = _equatorial_to_ecliptic((-math.sin(ra), math.cos(ra), 0.0))      # node Q, RA = alpha0 + 90 deg
+    pq = (p[1] * q[2] - p[2] * q[1], p[2] * q[0] - p[0] * q[2], p[0] * q[1] - p[1] * q[0])
+    w0, rate = IAU_PRIME_MERIDIAN[name]
+    w = math.radians(w0 + rate * days)
+    return tuple(math.cos(w) * q[i] + math.sin(w) * pq[i] for i in range(3))
+
+
 def obliquity_deg(name: str) -> float:
     """Angle between spin axis and orbit normal, from the vectors above."""
     k, n = spin_axis(name), orbit_normal(name)
