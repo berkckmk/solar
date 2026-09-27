@@ -69,7 +69,7 @@ CLOCK_START, CLOCK_END = 31, 570          # clock runs 00:00 → end between the
 
 # ── Layout (world units; camera looks straight down −Z, screen up = +Y) ────
 CELL_X = (-9.0, -3.0, 3.0, 9.0)
-ROW_PLANET_Y = (2.7, -3.05)
+ROW_PLANET_Y = (2.95, -2.8)        # bottom-row bars stay clear of the footer line
 TEXT_OFFSETS = (-1.75, -2.15, -2.5, -2.82, -3.15)   # name, line1, line2, line3, bar (from planet y)
 PLANET_R = 1.0
 SATURN_R = 0.72
@@ -527,6 +527,9 @@ def build_scene(res: tuple[int, int], samples: int, lang: str, tl):
     sun_data.energy = 4.2
     sun_data.color = (1.0, 0.96, 0.90)
     sun_data.angle = math.radians(0.6)
+    # The planets sit in rows along the light direction: with shadows on, each one
+    # eclipses its right-hand neighbour (Venus, Earth, Mars, Saturn... went dark).
+    sun_data.use_shadow = False
     sun = bpy.data.objects.new("Sunlight", sun_data)
     bpy.context.collection.objects.link(sun)
     sun.rotation_euler = (0.0, math.radians(-90.0), 0.0)
