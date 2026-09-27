@@ -29,12 +29,14 @@ try:
     from science.metrics import compute_all_metrics, INTERVALS
     from science.coordinates import ecliptic_km_to_blender
     from science.rotation import solar_day_days, shared_clock_table
+    from science.attitude import obliquity_deg
 except ImportError:
     from planet_data import PLANETS, PLANET_ORDER  # type: ignore
     from kepler import heliocentric_position, orbital_arc_length  # type: ignore
     from metrics import compute_all_metrics, INTERVALS  # type: ignore
     from coordinates import ecliptic_km_to_blender  # type: ignore
     from rotation import solar_day_days, shared_clock_table  # type: ignore
+    from attitude import obliquity_deg  # type: ignore
 
 
 def validate_all() -> list[str]:
@@ -134,6 +136,13 @@ def validate_all() -> list[str]:
             errors.append(f"{r.planet} rotation state NaN")
         if not (0.0 <= PLANETS[r.planet].axial_tilt_deg <= 180.0):
             errors.append(f"{r.planet} axial tilt out of range")
+
+    # ── 8. Spin-axis vectors reproduce the fact-sheet obliquity ───────
+    for name in PLANET_ORDER:
+        got = obliquity_deg(name)
+        exp = PLANETS[name].axial_tilt_deg
+        if abs(got - exp) > 0.1:
+            errors.append(f"{name} obliquity from IAU pole = {got:.2f}°, expected {exp}°")
 
     return errors
 

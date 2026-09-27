@@ -5,6 +5,12 @@ Commands:
     python3 generate.py --proof-clip   # Render 25s proof video
     python3 generate.py --validate     # Run astronomical validation checks
     python3 generate.py --final        # Run resumable 9:25 1440p final production render
+
+Long versions (continuous clock, zoom into every planet and back out to the system):
+    python3 generate.py --journey --lang tr             # Format A: 9:25 system journey, 2560x1440
+    python3 generate.py --shared-clock-long --lang tr   # Format B: 9:09 eight-planet shared clock, 1920x1080
+    Add --still 2400 7200 to render test frames only, --frames START END for a range,
+    --res W H / --samples N to override quality.
 """
 
 from __future__ import annotations
@@ -43,6 +49,26 @@ def run_blender_script(args: list[str]) -> int:
     cmd = [blender_bin, "--background", "--python", str(script), "--"] + args
     print(f"Running: {' '.join(cmd)}")
     return subprocess.run(cmd, check=True).returncode
+
+
+def run_blender_file(script_name: str, args: list[str]) -> int:
+    """Run one of the render scripts inside Blender's background Python runtime."""
+    cmd = [find_blender(), "--background", "--python", str(PROJECT_DIR / script_name), "--"] + args
+    print(f"Running: {' '.join(cmd)}")
+    return subprocess.run(cmd, check=True).returncode
+
+
+def long_render_args(args) -> list[str]:
+    out = ["--lang", args.lang]
+    if args.res:
+        out += ["--res", *map(str, args.res)]
+    if args.samples:
+        out += ["--samples", str(args.samples)]
+    if args.still:
+        out += ["--still", *map(str, args.still)]
+    if args.range:
+        out += ["--frames", *map(str, args.range)]
+    return out
 
 
 def validate_science():
@@ -158,6 +184,14 @@ def main():
     parser.add_argument("--range", nargs=2, type=int, metavar=("START", "END"), help="Optional frame range for render")
     parser.add_argument("--day1-loop", action="store_true", help="Render 20s 1-Day Earth 24h loop animation")
     parser.add_argument("--day1-speedup", action="store_true", help="Extract 20s 1-Day Act speedup from master")
+    parser.add_argument("--journey", action="store_true",
+                        help="Render the continuous 9:25 system journey (zoom in/out of every planet)")
+    parser.add_argument("--shared-clock-long", action="store_true",
+                        help="Render the 9-minute eight-planet shared clock (1 / 30 / 365 days)")
+    parser.add_argument("--lang", choices=("en", "tr"), default="en", help="On-screen language")
+    parser.add_argument("--res", nargs=2, type=int, metavar=("W", "H"), help="Override resolution")
+    parser.add_argument("--samples", type=int, help="Override EEVEE samples")
+    parser.add_argument("--still", nargs="+", type=int, metavar="FRAME", help="Render test frames only")
     args = parser.parse_args()
 
     if args.validate:
@@ -172,6 +206,10 @@ def main():
         run_day1_loop()
     elif args.day1_speedup:
         run_day1_speedup()
+    elif args.journey:
+        run_blender_file("render_system_journey.py", long_render_args(args))
+    elif args.shared_clock_long:
+        run_blender_file("render_shared_clock.py", ["--long"] + long_render_args(args))
     else:
         parser.print_help()
 

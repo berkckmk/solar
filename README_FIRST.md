@@ -28,6 +28,38 @@ python3 projects/solar_system_time_journey/generate.py --proof-clip
 
 ---
 
+## 1b. Long Versions: Continuous Clock, Zoom Into Every Planet
+
+Two ~9-minute landscape cuts where time never freezes: one shared Earth clock drives all
+eight planets on their real Kepler orbits, and the camera keeps leaving the whole system
+to visit each world, then pulls back out so you see how they move against each other.
+
+```bash
+python3 projects/solar_system_time_journey/generate.py --journey --lang tr            # Format A
+python3 projects/solar_system_time_journey/generate.py --shared-clock-long --lang tr  # Format B
+# or double-click render_long_versions_macos.command (Turkish; pass `en` for English)
+```
+
+| | Format A: System Journey | Format B: Shared Clock (long) |
+|---|---|---|
+| Script | `render_system_journey.py` | `render_shared_clock.py --long` |
+| Length | 9:25, 16,950 frames, 2560x1440 | 9:09, 16,470 frames, 1920x1080 |
+| Structure | `project.json` timeline: 3 acts x 8 focus shots + comparisons | intro, then 3 acts (clock 0 -> 1 -> 30 -> 365 days), each: grid, 8 planet zooms, summary |
+| Zoomed in | camera rides with the planet; growing trail; real spin axis vs. orbit normal with the tilt angle; prime meridian; distance, orbit angle, speed, Sun distance, spin, local days | real tilt arc; orbit inset (seen from north) with the angle swept so far; spin, local days, day length |
+| Pulled back | whole system at the same moment: swept-angle wedges, Sun-planet "clock hands", lap panel for all 8 | the 8-planet grid on the same clock; bars rescale per act |
+| Output | `output/.../final/solar_system_journey_<lang>_1440p.mp4` | `output/.../final/solar_shared_clock_9min_<lang>.mp4` |
+
+Useful flags (both): `--still 2400 7200` renders test frames only (into `output/.../journey_stills/`
+or next to the frames), `--range START END` renders a slice, `--res W H` / `--samples N` override quality.
+Renders are resumable: existing PNG frames are skipped, and the MP4 is encoded once all frames exist.
+
+Science behind the new detail: `science/attitude.py` gives each planet's real spin-axis direction
+(IAU pole RA/Dec -> J2000 ecliptic); `science/validation.py` checks it reproduces the NASA obliquities.
+Surface spin faster than ~35° per frame (act III) is drawn rate-limited with the meridian stripe hidden;
+all on-screen numbers stay exact.
+
+---
+
 ## 2. Deliverables & Output Locations
 
 | Output | Path | Description |
