@@ -1,0 +1,264 @@
+{
+  "schema_version": 1,
+  "id": "solar_system_time_journey",
+  "title": "Solar System Through Earth Time",
+  "generator": "blender",
+  "status": "ready",
+  "video": {
+    "width": 2560,
+    "height": 1440,
+    "fps": 30,
+    "aspect_ratio": "16:9",
+    "audio_enabled": true
+  },
+  "science": {
+    "earth_day_intervals": [
+      1,
+      30,
+      365
+    ],
+    "epoch": "J2000.0 (JD 2451545.0, 2000-01-01T12:00:00 TDB, NASA JPL SSD Standish 1992)",
+    "planet_order": [
+      "mercury",
+      "venus",
+      "earth",
+      "mars",
+      "jupiter",
+      "saturn",
+      "uranus",
+      "neptune"
+    ]
+  },
+  "source_prompt": "SOURCE_PROMPT.md",
+  "production_gates": {
+    "official_science_sources": true,
+    "ephemeris_dataset": true,
+    "kepler_solver": true,
+    "numerical_validation": true,
+    "offline_assets": true,
+    "visual_materials": true,
+    "camera_and_trails": true,
+    "ui_and_audio": true,
+    "blender_scene": true,
+    "resumable_render_and_encode": true,
+    "proof_stills_and_clip": true,
+    "visual_qa": true,
+    "production_master": true
+  },
+  "timeline": [
+    {
+      "id": "opening",
+      "kind": "opening",
+      "seconds": 25
+    },
+    {
+      "id": "chapter_1",
+      "kind": "chapter",
+      "seconds": 12,
+      "earth_days": 1
+    },
+    {
+      "id": "mercury_1",
+      "kind": "focus",
+      "seconds": 17,
+      "planet": "mercury",
+      "earth_days": 1
+    },
+    {
+      "id": "venus_1",
+      "kind": "focus",
+      "seconds": 17,
+      "planet": "venus",
+      "earth_days": 1
+    },
+    {
+      "id": "earth_1",
+      "kind": "focus",
+      "seconds": 17,
+      "planet": "earth",
+      "earth_days": 1
+    },
+    {
+      "id": "mars_1",
+      "kind": "focus",
+      "seconds": 17,
+      "planet": "mars",
+      "earth_days": 1
+    },
+    {
+      "id": "jupiter_1",
+      "kind": "focus",
+      "seconds": 17,
+      "planet": "jupiter",
+      "earth_days": 1
+    },
+    {
+      "id": "saturn_1",
+      "kind": "focus",
+      "seconds": 17,
+      "planet": "saturn",
+      "earth_days": 1
+    },
+    {
+      "id": "uranus_1",
+      "kind": "focus",
+      "seconds": 17,
+      "planet": "uranus",
+      "earth_days": 1
+    },
+    {
+      "id": "neptune_1",
+      "kind": "focus",
+      "seconds": 17,
+      "planet": "neptune",
+      "earth_days": 1
+    },
+    {
+      "id": "comparison_1",
+      "kind": "comparison",
+      "seconds": 10,
+      "earth_days": 1
+    },
+    {
+      "id": "chapter_30",
+      "kind": "chapter",
+      "seconds": 12,
+      "earth_days": 30
+    },
+    {
+      "id": "mercury_30",
+      "kind": "focus",
+      "seconds": 18,
+      "planet": "mercury",
+      "earth_days": 30
+    },
+    {
+      "id": "venus_30",
+      "kind": "focus",
+      "seconds": 18,
+      "planet": "venus",
+      "earth_days": 30
+    },
+    {
+      "id": "earth_30",
+      "kind": "focus",
+      "seconds": 18,
+      "planet": "earth",
+      "earth_days": 30
+    },
+    {
+      "id": "mars_30",
+      "kind": "focus",
+      "seconds": 18,
+      "planet": "mars",
+      "earth_days": 30
+    },
+    {
+      "id": "jupiter_30",
+      "kind": "focus",
+      "seconds": 18,
+      "planet": "jupiter",
+      "earth_days": 30
+    },
+    {
+      "id": "saturn_30",
+      "kind": "focus",
+      "seconds": 18,
+      "planet": "saturn",
+      "earth_days": 30
+    },
+    {
+      "id": "uranus_30",
+      "kind": "focus",
+      "seconds": 18,
+      "planet": "uranus",
+      "earth_days": 30
+    },
+    {
+      "id": "neptune_30",
+      "kind": "focus",
+      "seconds": 18,
+      "planet": "neptune",
+      "earth_days": 30
+    },
+    {
+      "id": "comparison_30",
+      "kind": "comparison",
+      "seconds": 12,
+      "earth_days": 30
+    },
+    {
+      "id": "chapter_365",
+      "kind": "chapter",
+      "seconds": 12,
+      "earth_days": 365
+    },
+    {
+      "id": "mercury_365",
+      "kind": "focus",
+      "seconds": 20,
+      "planet": "mercury",
+      "earth_days": 365
+    },
+    {
+      "id": "venus_365",
+      "kind": "focus",
+      "seconds": 20,
+      "planet": "venus",
+      "earth_days": 365
+    },
+    {
+      "id": "earth_365",
+      "kind": "focus",
+      "seconds": 20,
+      "planet": "earth",
+      "earth_days": 365
+    },
+    {
+      "id": "mars_365",
+      "kind": "focus",
+      "seconds": 20,
+      "planet": "mars",
+      "earth_days": 365
+    },
+    {
+      "id": "jupiter_365",
+      "kind": "focus",
+      "seconds": 20,
+      "planet": "jupiter",
+      "earth_days": 365
+    },
+    {
+      "id": "saturn_365",
+      "kind": "focus",
+      "seconds": 20,
+      "planet": "saturn",
+      "earth_days": 365
+    },
+    {
+      "id": "uranus_365",
+      "kind": "focus",
+      "seconds": 20,
+      "planet": "uranus",
+      "earth_days": 365
+    },
+    {
+      "id": "neptune_365",
+      "kind": "focus",
+      "seconds": 20,
+      "planet": "neptune",
+      "earth_days": 365
+    },
+    {
+      "id": "comparison_365",
+      "kind": "comparison",
+      "seconds": 12,
+      "earth_days": 365
+    },
+    {
+      "id": "outro",
+      "kind": "outro",
+      "seconds": 30
+    }
+  ]
+}
