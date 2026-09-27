@@ -878,11 +878,20 @@ def main():
     ap.add_argument("--frames", nargs=2, type=int)
     ap.add_argument("--still", type=int, nargs="+", help="Render test frame(s) and exit")
     ap.add_argument("--name", default=None)
+    ap.add_argument("--test", type=int, metavar="START",
+                    help="Render a fresh 20 s clip from this frame into its own folder and encode it")
     args = ap.parse_args(argv)
 
     tl = LongTimeline() if args.long else ShortTimeline(args.days)
     name = args.name or ("solar_shared_clock_9min" if args.long else "solar_1_day_shared_clock_20s")
-    frames_dir = OUTPUT_DIR / f"{name}_{args.lang}_frames"
+    test_len = int(20 * FPS)
+    if args.test is not None:
+        test_f0 = max(1, min(args.test, tl.total - test_len + 1))
+        frames_dir = OUTPUT_DIR / f"test_{name}_{args.lang}_{test_f0:05d}_frames"
+        for old in frames_dir.glob("frame_*.png"):      # a test always reflects the current code
+            old.unlink()
+    else:
+        frames_dir = OUTPUT_DIR / f"{name}_{args.lang}_frames"
     frames_dir.mkdir(parents=True, exist_ok=True)
 
     state = build_scene(tuple(args.res), args.samples, args.lang, tl)
@@ -898,7 +907,10 @@ def main():
             print(f"Still: {out}")
         return
 
-    f0, f1 = args.frames if args.frames else (1, tl.total)
+    if args.test is not None:
+        f0, f1 = test_f0, test_f0 + test_len - 1
+    else:
+        f0, f1 = args.frames if args.frames else (1, tl.total)
     for f in range(f0, f1 + 1):
         out = frames_dir / f"frame_{f:06d}.png"
         if out.exists() and out.stat().st_size > 0:
@@ -909,6 +921,12 @@ def main():
         bpy.ops.render.render(write_still=True)
         if f % 30 == 0:
             print(f"  frame {f}/{tl.total}")
+
+    if args.test is not None:
+        mp4 = encode_frames(frames_dir, OUTPUT_DIR / "final" / f"test_{name}_{args.lang}_{f0:05d}.mp4",
+                            FPS, start_number=f0)
+        print(f"✅ Test clip: {mp4}")
+        return
 
     if len(list(frames_dir.glob("frame_*.png"))) < tl.total:
         print("Partial range rendered; skipping encode.")

@@ -50,7 +50,10 @@ python3 projects/solar_system_time_journey/generate.py --shared-clock-long --lan
 | Output | `output/.../final/solar_system_journey_<lang>_1440p.mp4` | `output/.../final/solar_shared_clock_9min_<lang>.mp4` |
 
 Useful flags (both): `--still 2400 7200` renders test frames only (into `output/.../journey_stills/`
-or next to the frames), `--range START END` renders a slice, `--res W H` / `--samples N` override quality.
+or next to the frames), `--test START` renders a fresh 20 s clip from that frame into its own folder
+and encodes it to `output/.../final/test_*.mp4` (e.g. `--journey --test 5850`,
+`--shared-clock-long --test 10981`), `--range START END` renders a slice, `--res W H` / `--samples N`
+override quality.
 Renders are resumable: existing PNG frames are skipped, and the MP4 is encoded once all frames exist.
 
 Science behind the new detail: `science/attitude.py` gives each planet's real spin-axis direction

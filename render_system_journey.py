@@ -76,6 +76,7 @@ MIN_PLANET = 0.0017                         # min planet radius / camera distanc
 MIN_SUN = 0.0026
 MAX_SPIN_DEG_PER_FRAME = 35.0               # faster surface spin is slowed for display
 TRAIL_GRID = 720                            # trail samples per interval
+TEST_FRAMES = 20 * FPS                      # --test clip length
 
 STRINGS = {
     "en": {
@@ -1086,6 +1087,8 @@ def main():
     ap.add_argument("--step", type=int, default=1, help="Render every Nth frame (quick preview)")
     ap.add_argument("--still", nargs="+", type=int, help="Render these frames as stills and exit")
     ap.add_argument("--list-shots", action="store_true")
+    ap.add_argument("--test", type=int, metavar="START",
+                    help="Render a fresh 20 s clip from this frame into its own folder and encode it")
     args = ap.parse_args(argv)
 
     shots = load_shots()
@@ -1111,9 +1114,16 @@ def main():
             bpy.ops.render.render(write_still=True)
         return
 
-    frames_dir = out / f"journey_{args.lang}_frames"
+    if args.test is not None:
+        f0 = max(0, min(args.test, total - TEST_FRAMES))
+        f1 = f0 + TEST_FRAMES - 1
+        frames_dir = out / f"test_journey_{args.lang}_{f0:06d}_frames"
+        for old in frames_dir.glob("frame_*.png"):      # a test always reflects the current code
+            old.unlink()
+    else:
+        frames_dir = out / f"journey_{args.lang}_frames"
+        f0, f1 = args.frames if args.frames else (0, total - 1)
     frames_dir.mkdir(parents=True, exist_ok=True)
-    f0, f1 = args.frames if args.frames else (0, total - 1)
     for f in range(f0, f1 + 1, max(1, args.step)):
         path = frames_dir / f"frame_{f:06d}.png"
         if path.exists() and path.stat().st_size > 0:
@@ -1125,7 +1135,11 @@ def main():
         if f % 30 == 0:
             print(f"  frame {f}/{total - 1}  {st.shot.id}  clock {st.clock:.3f} d")
 
-    if args.step == 1 and len(list(frames_dir.glob("frame_*.png"))) >= total:
+    if args.test is not None:
+        mp4 = encode_frames(frames_dir, out / "final" / f"test_journey_{args.lang}_{f0:06d}.mp4",
+                            FPS, start_number=f0)
+        print(f"✅ Test clip: {mp4}")
+    elif args.step == 1 and len(list(frames_dir.glob("frame_*.png"))) >= total:
         mp4 = encode_frames(frames_dir, out / "final" /
                             f"solar_system_journey_{args.lang}_{args.res[1]}p.mp4", FPS)
         print(f"✅ {mp4}")

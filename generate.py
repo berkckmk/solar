@@ -9,7 +9,8 @@ Commands:
 Long versions (continuous clock, zoom into every planet and back out to the system):
     python3 generate.py --journey --lang tr             # Format A: 9:25 system journey, 2560x1440
     python3 generate.py --shared-clock-long --lang tr   # Format B: 9:09 eight-planet shared clock, 1920x1080
-    Add --still 2400 7200 to render test frames only, --frames START END for a range,
+    Add --still 2400 7200 to render test frames only, --test 5850 for a 20 s test clip,
+    --range START END for a range,
     --res W H / --samples N to override quality.
 """
 
@@ -68,6 +69,8 @@ def long_render_args(args) -> list[str]:
         out += ["--still", *map(str, args.still)]
     if args.range:
         out += ["--frames", *map(str, args.range)]
+    if args.test is not None:
+        out += ["--test", str(args.test)]
     return out
 
 
@@ -192,6 +195,8 @@ def main():
     parser.add_argument("--res", nargs=2, type=int, metavar=("W", "H"), help="Override resolution")
     parser.add_argument("--samples", type=int, help="Override EEVEE samples")
     parser.add_argument("--still", nargs="+", type=int, metavar="FRAME", help="Render test frames only")
+    parser.add_argument("--test", type=int, metavar="START",
+                        help="Render a fresh 20 s test clip starting at this frame and encode it")
     args = parser.parse_args()
 
     if args.validate:
